@@ -2,7 +2,8 @@ package hmda.validation.rules
 
 import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
-import hmda.validation.AS
+import hmda.validation.{ AS, ValidationStats }
+
 import scala.concurrent.duration._
 
 trait StatsLookup {
@@ -10,6 +11,6 @@ trait StatsLookup {
   val duration = configuration.getInt("hmda.actor.timeout")
   implicit val timeout = Timeout(duration.seconds)
 
-  def validationStats(implicit system: AS[_]) = system.actorSelection("/user/validation-stats")
+  def validationStats(implicit system: AS[_]) = system.actorSelection(ValidationStats.actorPath)
 
 }
