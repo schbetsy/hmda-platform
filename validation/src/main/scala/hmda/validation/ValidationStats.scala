@@ -54,8 +54,11 @@ object ValidationStats {
 
   def props(): Props = Props(new ValidationStats)
 
+  val actorName = "validation-stats"
+  val actorPath = s"/user/$actorName"
+
   def createValidationStats(system: ActorSystem): ActorRef = {
-    system.actorOf(ValidationStats.props(), "validation-stats")
+    system.actorOf(ValidationStats.props(), actorName)
   }
 
   case class ValidationStatsState(stats: Seq[SubmissionStats] = Nil) {

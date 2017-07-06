@@ -99,7 +99,7 @@ class SubmissionLarStats(submissionId: SubmissionId) extends HmdaPersistentActor
       persist(SubmittedLarsUpdated(totalSubmittedLars)) { e =>
         log.debug(s"Persisted: $totalSubmittedLars")
         updateState(e)
-        val validationStats = context.actorSelection("/user/validation-stats")
+        val validationStats = context.actorSelection(ValidationStats.actorPath)
         validationStats ! AddSubmissionSubmittedTotal(totalSubmittedLars, submissionId)
       }
 
@@ -111,7 +111,7 @@ class SubmissionLarStats(submissionId: SubmissionId) extends HmdaPersistentActor
       persist(event) { e =>
         log.debug(s"Persisted: $totalValidatedLars")
         updateState(e)
-        val validationStats = context.actorSelection("/user/validation-stats")
+        val validationStats = context.actorSelection(ValidationStats.actorPath)
         val msg = AddSubmissionMacroStats(
           submissionId,
           totalValidatedLars,
@@ -132,7 +132,7 @@ class SubmissionLarStats(submissionId: SubmissionId) extends HmdaPersistentActor
       persist(IrsStatsUpdated(msaSeq)) { e =>
         log.debug(s"Persisted: $msaSeq")
         updateState(e)
-        val validationStats = context.actorSelection("/user/validation-stats")
+        val validationStats = context.actorSelection(ValidationStats.actorPath)
         validationStats ! AddIrsStats(msaSeq, submissionId)
       }
 

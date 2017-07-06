@@ -29,7 +29,7 @@ import hmda.persistence.messages.events.processing.HmdaFileParserEvents.{ LarPar
 import hmda.persistence.messages.events.processing.HmdaFileValidatorEvents._
 import hmda.persistence.model.HmdaSupervisorActor.FindActorByName
 import hmda.persistence.processing.SubmissionManager.GetActorRef
-import hmda.validation.SubmissionLarStats
+import hmda.validation.{ SubmissionLarStats, ValidationStats }
 import hmda.validation.SubmissionLarStats.{ PersistIrs, PersistStatsForMacroEdits }
 import hmda.validation.ValidationStats.AddSubmissionTaxId
 
@@ -141,7 +141,7 @@ class HmdaFileValidator(submissionId: SubmissionId) extends HmdaPersistentActor 
 
     case BeginValidation(replyTo) =>
       val validationStarted = ValidationStarted(submissionId)
-      val validationStats = context.actorSelection("/user/validation-stats")
+      val validationStats = context.actorSelection(ValidationStats.actorPath)
 
       sender() ! validationStarted
       events(parserPersistenceId)

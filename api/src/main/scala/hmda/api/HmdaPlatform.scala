@@ -81,7 +81,7 @@ object HmdaPlatform {
     HmdaProjectionQuery.main(Array.empty[String])
 
     // Start validation stats actor
-    system.actorOf(ValidationStats.props(), "validation-stats")
+    system.actorOf(ValidationStats.props(), ValidationStats.actorName)
 
     //Load demo data
     lazy val isDemo = configuration.getBoolean("hmda.isDemo")

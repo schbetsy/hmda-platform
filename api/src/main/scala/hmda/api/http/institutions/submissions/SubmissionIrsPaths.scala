@@ -13,6 +13,7 @@ import hmda.api.protocol.processing.MsaProtocol
 import hmda.census.model.Msa
 import hmda.model.fi.SubmissionId
 import hmda.query.repository.filing.FilingComponent
+import hmda.validation.ValidationStats
 import hmda.validation.ValidationStats.FindIrsStats
 
 import scala.concurrent.{ ExecutionContext, Future }
@@ -62,7 +63,7 @@ trait SubmissionIrsPaths
     }
 
   private def getMsa(instId: String, period: String, seqNr: Int)(implicit ec: ExecutionContext): Future[Seq[Msa]] = {
-    val validationStats = system.actorSelection("/user/validation-stats")
+    val validationStats = system.actorSelection(ValidationStats.actorPath)
     val submissionId = SubmissionId(instId, period, seqNr)
     (validationStats ? FindIrsStats(submissionId)).mapTo[Seq[Msa]]
   }
