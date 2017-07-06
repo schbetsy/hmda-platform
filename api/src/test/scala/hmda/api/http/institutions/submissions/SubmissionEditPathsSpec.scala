@@ -95,6 +95,11 @@ class SubmissionEditPathsSpec extends InstitutionHttpApiSpec with LarGenerators 
       // Check for correct baseline validation state.
       //   Incorrect baseline will invalidate the other tests in this section.
       val state: HmdaFileValidationState = Await.result(fValidationState, 5.seconds)
+      println(s"here's the state: ")
+      println(s"syntactical: ${state.syntacticalErrors} <----- if that has any, there's a problem")
+      println(s"validity: ${state.validityErrors}")
+      println(s"quality: ${state.qualityErrors}")
+      println(s"macro: ${state.larMacro}")
       state.validityErrors.isEmpty mustBe true
       state.syntacticalErrors.isEmpty mustBe true
       state.macroVerified mustBe false
