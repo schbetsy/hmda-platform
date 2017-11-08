@@ -200,7 +200,7 @@ class RaceUtilSpec extends AsyncWordSpec with MustMatchers with SourceUtils with
   }
 
   "raceBorrowerCharacteristic" must {
-    "generate a RaceBorrowerCharacteristic with all 4 ethnicity categories and the specified dispositions" in {
+    "generate a RaceBorrowerCharacteristic with all 8 race categories and the specified dispositions" in {
       val lars = lar100ListGen.sample.get
       val dispositions = List(ReceivedDisp, OriginatedDisp)
 
