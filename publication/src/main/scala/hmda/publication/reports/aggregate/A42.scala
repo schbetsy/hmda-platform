@@ -109,14 +109,6 @@ object A42
           GenderCharacteristic(Male, m).toJson,
           GenderCharacteristic(Female, f).toJson,
           GenderCharacteristic(Joint, j).toJson
-        //JsObject(
-        //("gender", Female.toJson),
-        //("dispositions", f.toJson)
-        //),
-        //JsObject(
-        //("gender", Joint.toJson),
-        //("dispositions", j.toJson)
-        //)
         ))
       )
     }
