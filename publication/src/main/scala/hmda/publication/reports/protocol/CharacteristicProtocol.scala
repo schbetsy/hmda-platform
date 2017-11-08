@@ -7,6 +7,7 @@ trait CharacteristicProtocol
     extends RaceEnumProtocol
     with EthnicityEnumProtocol
     with MinorityStatusEnumProtocol
+    with GenderEnumProtocol
     with DispositionProtocol {
 
   implicit object RaceCharacteristicFormat extends RootJsonFormat[RaceCharacteristic] {
@@ -69,6 +70,26 @@ trait CharacteristicProtocol
 
   }
 
+  implicit object GenderCharacteristicFormat extends RootJsonFormat[GenderCharacteristic] {
+
+    override def write(obj: GenderCharacteristic): JsValue = {
+      JsObject(
+        "gender" -> JsString(obj.gender.description),
+        "dispositions" -> obj.dispositions.toJson
+      )
+    }
+
+    override def read(json: JsValue): GenderCharacteristic = json match {
+      case JsObject(fields) =>
+        GenderCharacteristic(
+          fields("gender").convertTo[GenderEnum],
+          fields("dispositions").convertTo[List[Disposition]]
+        )
+      case _ => throw DeserializationException("Cannot deserialize JSON structure")
+    }
+
+  }
+
   implicit object CharacteristicFormat extends RootJsonFormat[Characteristic] {
 
     override def write(obj: Characteristic): JsValue = obj match {
@@ -87,6 +108,11 @@ trait CharacteristicProtocol
           "minorityStatus" -> JsString(minorityStatus.description),
           "dispositions" -> dispositions.toJson
         )
+      case GenderCharacteristic(gender, dispositions) =>
+        JsObject(
+          "gender" -> JsString(gender.description),
+          "dispositions" -> dispositions.toJson
+        )
     }
 
     override def read(json: JsValue): Characteristic = json match {
@@ -103,6 +129,11 @@ trait CharacteristicProtocol
       case JsObject(fields) if fields.isDefinedAt("minorityStatus") =>
         MinorityStatusCharacteristic(
           fields("minorityStatus").convertTo[MinorityStatusEnum],
+          fields("dispositions").convertTo[List[Disposition]]
+        )
+      case JsObject(fields) if fields.isDefinedAt("gender") =>
+        GenderCharacteristic(
+          fields("gender").convertTo[GenderEnum],
           fields("dispositions").convertTo[List[Disposition]]
         )
     }

@@ -22,7 +22,7 @@ class GenderUtilSpec extends AsyncWordSpec with MustMatchers with SourceUtils wi
       val nonMaleLars = filterGender(source(excludedLars), Male)
       count(nonMaleLars).map(_ mustBe 0)
     }
-    "exclude lars where applicant is female and coApplicant is female" in {
+    "exclude lars where applicant is male and coApplicant is female" in {
       val excludedLars = larCollectionWithApplicant(_.copy(sex = 1, coSex = 2))
       val nonMaleLars = filterGender(source(excludedLars), Male)
       count(nonMaleLars).map(_ mustBe 0)

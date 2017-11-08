@@ -25,3 +25,11 @@ case class MinorityStatusBorrowerCharacteristic(minoritystatus: List[MinoritySta
     MinorityStatusBorrowerCharacteristic(combined)
   }
 }
+
+case class GenderBorrowerCharacteristic(genders: List[GenderCharacteristic]) extends BorrowerCharacteristic {
+  def +(gbc: GenderBorrowerCharacteristic) = {
+    val combined = genders.map(m =>
+      m + gbc.genders.find(_.gender == m.gender).get)
+    GenderBorrowerCharacteristic(combined)
+  }
+}

@@ -27,3 +27,11 @@ case class MinorityStatusCharacteristic(minorityStatus: MinorityStatusEnum, disp
     MinorityStatusCharacteristic(minorityStatus, combined)
   }
 }
+
+case class GenderCharacteristic(gender: GenderEnum, dispositions: List[Disposition]) extends Characteristic {
+  def +(msc: GenderCharacteristic) = {
+    val combined = dispositions.map(d =>
+      d + msc.dispositions.find(_.disposition == d.disposition).get)
+    GenderCharacteristic(gender, combined)
+  }
+}
