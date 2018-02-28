@@ -26,10 +26,7 @@ class D31Spec extends AsyncWordSpec with MustMatchers with LarGenerators with Be
   val fips = 11540 // Appleton, WI
   val resp = Respondent(ExternalId(respId, RssdId), "Fox Valley Test Bank", "", "", "")
   val inst = Institution.empty.copy(respondent = resp)
-  val lars = Gen.listOfN(100, larWithValidGeoGen).sample.get.map { lar: LoanApplicationRegister =>
-    val loan = lar.loan.copy(loanType = 2, purpose = 3, propertyType = 1, occupancy = 1)
-    lar.copy(respondentId = respId, loan = loan, lienStatus = 1)
-  }
+  val lars = Gen.listOfN(100, larWithValidGeoGen).sample.get.map(_.copy(respondentId = respId))
 
   val source: Source[LoanApplicationRegister, NotUsed] = Source
     .fromIterator(() => lars.toIterator)
