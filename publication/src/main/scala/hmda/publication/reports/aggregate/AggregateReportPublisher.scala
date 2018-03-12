@@ -70,17 +70,30 @@ class AggregateReportPublisher extends HmdaActor with LoanApplicationRegisterCas
   }
 
   private def generateReports = {
+    val larSource = readData(1000)
     val msaList = MsaIncomeLookup.everyFips.toList
     val parallelism = 1
 
-    val combinations = combine(msaList, aggregateReports) ++ combine(List(-1), nationalAggregateReports)
+    //val combinations = combine(msaList, aggregateReports) ++ combine(List(-1), nationalAggregateReports)
+    val combinations = List((33460, A42), (33460, A45), (33460, A46), (-1, N45), (-1, N46))
 
-    val reportS3Flow: Flow[(Int, AggregateReport), CompletionStage[MultipartUploadResult], NotUsed] =
-      Flow[(Int, AggregateReport)].mapAsync(parallelism) {
-        case (msa, report) => publishSingleReport(msa, report)
-      }
+    val simpleReportFlow: Flow[(Int, AggregateReport), AggregateReportPayload, NotUsed] =
+      Flow[(Int, AggregateReport)]
+        .mapAsyncUnordered(parallelism){
+          case (msa, report) => report.generate(larSource, msa)
+        }
 
-    Source(combinations).via(reportS3Flow).runWith(Sink.ignore)
+    val s3Flow: Flow[AggregateReportPayload, CompletionStage[MultipartUploadResult], NotUsed] =
+      Flow[AggregateReportPayload]
+        .map(payload => {
+          val filePath = s"$environment/reports/aggregate/2017/${payload.msa}/${payload.reportID}.txt"
+          log.info(s"Publishing Aggregate report. MSA: ${payload.msa}, Report #: ${payload.reportID}")
+
+          Source.single(ByteString(payload.report))
+            .runWith(s3Client.multipartUpload(bucket, filePath))
+        })
+
+    Source(combinations).via(simpleReportFlow).via(s3Flow).runWith(Sink.ignore)
   }
 
   private def publishSingleReport(msa: Int, report: AggregateReport): Future[CompletionStage[MultipartUploadResult]] = {
