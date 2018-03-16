@@ -15,16 +15,25 @@ import hmda.persistence.model.HmdaActor
 import hmda.query.repository.filing.LoanApplicationRegisterCassandraRepository
 import akka.stream.alpakka.s3.javadsl.MultipartUploadResult
 import hmda.census.model.MsaIncomeLookup
+import hmda.model.fi.lar.LoanApplicationRegister
+import hmda.model.publication.reports.ApplicantIncomeEnum._
+import hmda.model.publication.reports._
 import hmda.persistence.messages.commands.publication.PublicationCommands.GenerateAggregateReports
+import hmda.publication.reports.util.DispositionType._
+import hmda.publication.reports.util.ReportUtil._
+import hmda.publication.reports.util._
+import hmda.util.SourceUtils
 
 import scala.concurrent.duration._
+import scala.util.Try
 
 object AggregateReportPublisher {
   val name = "aggregate-report-publisher"
   def props(): Props = Props(new AggregateReportPublisher)
 }
 
-class AggregateReportPublisher extends HmdaActor with LoanApplicationRegisterCassandraRepository {
+class AggregateReportPublisher extends HmdaActor with LoanApplicationRegisterCassandraRepository
+    with SourceUtils {
 
   val decider: Decider = { e =>
     repositoryLog.error("Unhandled error in stream", e)
@@ -51,18 +60,18 @@ class AggregateReportPublisher extends HmdaActor with LoanApplicationRegisterCas
   val s3Client = new S3Client(awsSettings, context.system, materializer)
 
   val aggregateReports: List[AggregateReport] = List(
-    //A2,
-    //AggregateA1, AggregateA2, AggregateA3,
-    //AggregateA4,
-    //AggregateB,
-    //A32,
-    //A42, A43, A45, A46, A47,
-    A51, A52, A53, A54, A56, A57 //,
-    //A71, A72, A73, A74, A75, A76, A77,
-    //A81, A82, A83, A84, A85, A86, A87,
-    //A9,
-    //A11_1, A11_2, A11_3, A11_4, A11_5, A11_6, A11_7, A11_8, A11_9, A11_10,
-    //A12_1, A12_2
+    A2,
+    AggregateA1, AggregateA2, AggregateA3,
+    AggregateA4,
+    AggregateB,
+    A32,
+    A42, A43, A45, A46, A47,
+    A51, A52, A53, A54, A56, A57,
+    A71, A72, A73, A74, A75, A76, A77,
+    A81, A82, A83, A84, A85, A86, A87,
+    A9,
+    A11_1, A11_2, A11_3, A11_4, A11_5, A11_6, A11_7, A11_8, A11_9, A11_10,
+    A12_1, A12_2
   )
 
   val nationalAggregateReports: List[AggregateReport] = List(
@@ -83,9 +92,126 @@ class AggregateReportPublisher extends HmdaActor with LoanApplicationRegisterCas
 
     case GenerateAggregateReports() =>
       log.info(s"Generating aggregate reports for 2017 filing year")
-      generateReports
+      //generateReports
+      checkFilters
 
     case _ => //do nothing
+  }
+
+  private def checkFilters = {
+    val larSource = readData(1000)
+
+    /* dispositions don't stall...
+    val dispositions = List(
+      FannieMae, FreddieMac, GinnieMae, FarmerMac, PrivateSecuritization, CommercialBank, FinanceCompany, Affiliate, OtherPurchaser,
+      DebtToIncomeRatio, EmploymentHistory, CreditHistory, Collateral, InsufficientCash, UnverifiableInformation, CreditAppIncomplete, MortgageInsuranceDenied, OtherDenialReason, TotalDenied,
+      FHA, Conventional, Refinancings, HomeImprovementLoans, LoansForFiveOrMore, NonoccupantLoans, ManufacturedHomeDwellings,
+      PreapprovalsToOriginations, PreapprovalsNotAccepted, PreApprovalsDenied,
+      ApplicationReceived, LoansOriginated, ApprovedButNotAccepted, ApplicationsDenied, ApplicationsWithdrawn, ClosedForIncompleteness, LoanPurchased, PreapprovalDenied, PreapprovalApprovedButNotAccepted
+    )
+
+    calculateYear(larSource).map(result => s"calculateYear: ${println(result)}")
+    println(s"formattedCurrentDate: $formattedCurrentDate")
+    println(s" ====> There should be ${dispositions.size} total dispositions.")
+
+    dispositions.map { disp =>
+      disp.calculateValueDisposition(larSource).map(println)
+    }
+    */
+
+    /* Fetching MetaData looks fine??
+    aggregateReports.map { report =>
+      val meta = ReportsMetaDataLookup.values(report.reportId)
+      println(s"${meta.reportType} - ${meta.reportTable} - ${meta.description}")
+    }
+
+    nationalAggregateReports.map { report =>
+      val meta = ReportsMetaDataLookup.values(report.reportId)
+      println(s"${meta.reportType} - ${meta.reportTable} - ${meta.description}")
+    }
+    */
+
+    /* Income filters look fine?
+    //val larsReportingIncome = larSource.filter(lar => Try(lar.applicant.income.toDouble).isSuccess)
+    val larsReportingIncome = larSource.filter { lar =>
+      lar.applicant.income != "NA" && lar.geography.msa != "NA"
+    }
+
+    count(larsReportingIncome).map { total =>
+      println(s"LARs with income != NA: $total")
+    }
+
+    def income(lar: LoanApplicationRegister): Int = lar.applicant.income.toInt
+    sum(larsReportingIncome, income)
+      .map { total =>
+        println(s"LARs TOTAL of all reported incomes: $total")
+      }
+
+    val incomeIntervalsNational: Map[ApplicantIncomeEnum, Source[LoanApplicationRegister, NotUsed]] = nationalLarsByIncomeInterval(larsReportingIncome)
+    count(incomeIntervalsNational(LessThan50PercentOfMSAMedian)).map { total =>
+      println(s"# of Lars NATIONALLY with LessThan50PercentOfMSAMedian: $total")
+    }
+    count(incomeIntervalsNational(Between50And79PercentOfMSAMedian)).map { total =>
+      println(s"# of Lars NATIONALLY with Between50and79Percent: $total")
+    }
+    count(incomeIntervalsNational(Between80And99PercentOfMSAMedian)).map { total =>
+      println(s"# of Lars NATIONALLY with Between80and99Percent: $total")
+    }
+    count(incomeIntervalsNational(Between100And119PercentOfMSAMedian)).map { total =>
+      println(s"# of Lars NATIONALLY with Between100And119Percent: $total")
+    }
+    count(incomeIntervalsNational(GreaterThan120PercentOfMSAMedian)).map { total =>
+      println(s"# of Lars NATIONALLY with GreaterThan120Percent: $total")
+    }
+
+    val incomeIntervalsMSA = larsByIncomeInterval(larsReportingIncome, calculateMedianIncomeIntervals(12060))
+    count(incomeIntervalsMSA(LessThan50PercentOfMSAMedian)).map { total =>
+      println(s"# of Lars in MSA 12060 with LessThan50PercentOfMSAMedian: $total")
+    }
+    count(incomeIntervalsMSA(Between50And79PercentOfMSAMedian)).map { total =>
+      println(s"# of Lars in MSA 12060 with Between50and79Percent: $total")
+    }
+    count(incomeIntervalsMSA(Between80And99PercentOfMSAMedian)).map { total =>
+      println(s"# of Lars in MSA 12060 with Between80and99Percent: $total")
+    }
+    count(incomeIntervalsMSA(Between100And119PercentOfMSAMedian)).map { total =>
+      println(s"# of Lars in MSA 12060 with Between100And119Percent: $total")
+    }
+    count(incomeIntervalsMSA(GreaterThan120PercentOfMSAMedian)).map { total =>
+      println(s"# of Lars in MSA 12060 with GreaterThan120Percent: $total")
+    }
+    */
+
+    /*  Identity filters look fine?
+    val ethnicities = EthnicityEnum.values
+    ethnicities.map { eth =>
+      count(EthnicityUtil.filterEthnicity(larSource, eth)).map { total =>
+        println(s"ETHNICITY: # of LARs with $eth: $total")
+      }
+    }
+
+    val races = RaceEnum.values
+    races.map { race =>
+      count(RaceUtil.filterRace(larSource, race)).map { total =>
+        println(s"RACE: # of LARs with $race: $total")
+      }
+    }
+
+    val minorityStatuses = MinorityStatusEnum.values
+    minorityStatuses.map { ms =>
+      count(MinorityStatusUtil.filterMinorityStatus(larSource, ms)).map { total =>
+        println(s"MINORITY: # of LARs with $ms: $total")
+      }
+    }
+
+    val genders = GenderEnum.values
+    genders.map { g =>
+      count(GenderUtil.filterGender(larSource, g)).map { total =>
+        println(s"GENDER: # of LARs with $g: $total")
+      }
+    }
+    */
+
   }
 
   private def generateReports = {
