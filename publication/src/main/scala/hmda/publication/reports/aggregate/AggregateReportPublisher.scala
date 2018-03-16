@@ -56,7 +56,7 @@ class AggregateReportPublisher extends HmdaActor with LoanApplicationRegisterCas
     //AggregateA4,
     //AggregateB,
     //A32,
-    A42, A43, A45, A46, A47,
+    //A42, A43, A45, A46, A47,
     A51, A52, A53, A54, A56, A57 //,
     //A71, A72, A73, A74, A75, A76, A77,
     //A81, A82, A83, A84, A85, A86, A87,
