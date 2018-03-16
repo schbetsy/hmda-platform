@@ -51,18 +51,18 @@ class AggregateReportPublisher extends HmdaActor with LoanApplicationRegisterCas
   val s3Client = new S3Client(awsSettings, context.system, materializer)
 
   val aggregateReports: List[AggregateReport] = List(
-    A2,
-    AggregateA1, AggregateA2, AggregateA3,
-    AggregateA4,
-    AggregateB,
-    A32,
+    //A2,
+    //AggregateA1, AggregateA2, AggregateA3,
+    //AggregateA4,
+    //AggregateB,
+    //A32,
     A42, A43, A45, A46, A47,
-    A51, A52, A53, A54, A56, A57,
-    A71, A72, A73, A74, A75, A76, A77,
-    A81, A82, A83, A84, A85, A86, A87,
-    A9,
-    A11_1, A11_2, A11_3, A11_4, A11_5, A11_6, A11_7, A11_8, A11_9, A11_10,
-    A12_1, A12_2
+    A51, A52, A53, A54, A56, A57 //,
+    //A71, A72, A73, A74, A75, A76, A77,
+    //A81, A82, A83, A84, A85, A86, A87,
+    //A9,
+    //A11_1, A11_2, A11_3, A11_4, A11_5, A11_6, A11_7, A11_8, A11_9, A11_10,
+    //A12_1, A12_2
   )
 
   val nationalAggregateReports: List[AggregateReport] = List(
@@ -93,7 +93,7 @@ class AggregateReportPublisher extends HmdaActor with LoanApplicationRegisterCas
     //val msaList = MsaIncomeLookup.everyFips.toList
     val msaList = List(12060, 42220)
 
-    val combinations = combine(msaList, aggregateReports) ++ combine(List(-1), nationalAggregateReports)
+    val combinations = combine(msaList, aggregateReports) //++ combine(List(-1), nationalAggregateReports)
 
     val simpleReportFlow: Flow[(Int, AggregateReport), AggregateReportPayload, NotUsed] =
       Flow[(Int, AggregateReport)].mapAsyncUnordered(1) {
