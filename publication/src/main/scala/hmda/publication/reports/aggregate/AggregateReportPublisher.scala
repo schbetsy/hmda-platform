@@ -90,7 +90,8 @@ class AggregateReportPublisher extends HmdaActor with LoanApplicationRegisterCas
 
   private def generateReports = {
     val larSource = readData(1000)
-    val msaList = MsaIncomeLookup.everyFips.toList
+    //val msaList = MsaIncomeLookup.everyFips.toList
+    val msaList = List(12060, 42220)
 
     val combinations = combine(msaList, aggregateReports) ++ combine(List(-1), nationalAggregateReports)
 
