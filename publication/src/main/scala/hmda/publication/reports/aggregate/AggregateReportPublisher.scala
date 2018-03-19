@@ -102,11 +102,11 @@ class AggregateReportPublisher extends HmdaActor with LoanApplicationRegisterCas
     val larSource = readData(1000)
 
     val dispositions = List(
-      FannieMae, FreddieMac, GinnieMae, FarmerMac, PrivateSecuritization, CommercialBank, FinanceCompany, Affiliate, OtherPurchaser,
-      DebtToIncomeRatio, EmploymentHistory, CreditHistory, Collateral, InsufficientCash, UnverifiableInformation, CreditAppIncomplete, MortgageInsuranceDenied, OtherDenialReason, TotalDenied,
-      FHA, Conventional, Refinancings, HomeImprovementLoans, LoansForFiveOrMore, NonoccupantLoans, ManufacturedHomeDwellings,
-      PreapprovalsToOriginations, PreapprovalsNotAccepted, PreApprovalsDenied,
-      ApplicationReceived, LoansOriginated, ApprovedButNotAccepted, ApplicationsDenied, ApplicationsWithdrawn, ClosedForIncompleteness, LoanPurchased, PreapprovalDenied, PreapprovalApprovedButNotAccepted
+      FannieMae, FreddieMac, GinnieMae, FarmerMac, PrivateSecuritization, CommercialBank, FinanceCompany, Affiliate, OtherPurchaser
+      //DebtToIncomeRatio, EmploymentHistory, CreditHistory, Collateral, InsufficientCash, UnverifiableInformation, CreditAppIncomplete, MortgageInsuranceDenied, OtherDenialReason, TotalDenied,
+      //FHA, Conventional, Refinancings, HomeImprovementLoans, LoansForFiveOrMore, NonoccupantLoans, ManufacturedHomeDwellings,
+      //PreapprovalsToOriginations, PreapprovalsNotAccepted, PreApprovalsDenied,
+      //ApplicationReceived, LoansOriginated, ApprovedButNotAccepted, ApplicationsDenied, ApplicationsWithdrawn, ClosedForIncompleteness, LoanPurchased, PreapprovalDenied, PreapprovalApprovedButNotAccepted
     )
 
     calculateYear(larSource).map(result => s"calculateYear: ${println(result)}")
@@ -117,6 +117,7 @@ class AggregateReportPublisher extends HmdaActor with LoanApplicationRegisterCas
       disp.calculateValueDisposition(larSource).map(println)
     }
 
+    /* metadata looks fine
     aggregateReports.map { report =>
       val meta = ReportsMetaDataLookup.values(report.reportId)
       println(s"${meta.reportType} - ${meta.reportTable} - ${meta.description}")
@@ -126,7 +127,9 @@ class AggregateReportPublisher extends HmdaActor with LoanApplicationRegisterCas
       val meta = ReportsMetaDataLookup.values(report.reportId)
       println(s"${meta.reportType} - ${meta.reportTable} - ${meta.description}")
     }
+    */
 
+    /* TODO: Try income and identity filters
     //val larsReportingIncome = larSource.filter(lar => Try(lar.applicant.income.toDouble).isSuccess)
     val larsReportingIncome = larSource.filter { lar =>
       lar.applicant.income != "NA" && lar.geography.msa != "NA"
@@ -203,6 +206,7 @@ class AggregateReportPublisher extends HmdaActor with LoanApplicationRegisterCas
         println(s"GENDER: # of LARs with $g: $total")
       }
     }
+    */
 
   }
 
