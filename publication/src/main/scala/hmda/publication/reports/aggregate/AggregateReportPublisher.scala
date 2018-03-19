@@ -26,6 +26,7 @@ import hmda.util.SourceUtils
 
 import scala.concurrent.duration._
 import scala.util.Try
+import spray.json._
 
 object AggregateReportPublisher {
   val name = "aggregate-report-publisher"
@@ -116,6 +117,7 @@ class AggregateReportPublisher extends HmdaActor with LoanApplicationRegisterCas
     val reportsToDo = List(A52)
 
     val combinations = combine(msaList, reportsToDo) //++ combine(List(-1), nationalAggregateReports)
+    println(s"combinations: $combinations")
 
     val simpleReportFlow: Flow[(Int, AggregateReport), AggregateReportPayload, NotUsed] =
       Flow[(Int, AggregateReport)].mapAsyncUnordered(1) {
@@ -127,6 +129,7 @@ class AggregateReportPublisher extends HmdaActor with LoanApplicationRegisterCas
         .map(payload => {
           val filePath = s"$environment/reports/aggregate/2017/${payload.msa}/${payload.reportID}.txt"
           log.info(s"Publishing Aggregate report. MSA: ${payload.msa}, Report #: ${payload.reportID}")
+          println(payload.report.parseJson)
 
           Source.single(ByteString(payload.report))
             .runWith(s3Client.multipartUpload(bucket, filePath))
