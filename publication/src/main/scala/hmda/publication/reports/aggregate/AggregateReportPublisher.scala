@@ -93,26 +93,14 @@ class AggregateReportPublisher extends HmdaActor with LoanApplicationRegisterCas
 
     case GenerateAggregateReports() =>
       log.info(s"Generating aggregate reports for 2017 filing year")
-      //generateReports
-      checkFilters
+      generateReports
 
     case _ => //do nothing
-  }
-
-  private def checkFilters = {
-    val larSource = readData(1000)
-    A52.generate(larSource, 12060).map { payload =>
-      println(payload.reportID)
-      println(payload.msa)
-      println(payload.report.parseJson)
-    }
   }
 
   private def generateReports = {
     val larSource = readData(1000)
     //val msaList = MsaIncomeLookup.everyFips.toList
-    //val msaList = List(12060, 42220)
-    //val reportsToDo = List(A42, A43, A45, A51, A52, A53)
     val msaList = List(12060)
     val reportsToDo = List(A52)
 
