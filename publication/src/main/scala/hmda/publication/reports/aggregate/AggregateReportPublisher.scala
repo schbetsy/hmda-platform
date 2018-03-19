@@ -109,6 +109,7 @@ class AggregateReportPublisher extends HmdaActor with LoanApplicationRegisterCas
       //ApplicationReceived, LoansOriginated, ApprovedButNotAccepted, ApplicationsDenied, ApplicationsWithdrawn, ClosedForIncompleteness, LoanPurchased, PreapprovalDenied, PreapprovalApprovedButNotAccepted
     )
 
+    /*
     calculateYear(larSource).map(result => s"calculateYear: ${println(result)}")
     println(s"formattedCurrentDate: $formattedCurrentDate")
     println(s" ====> There should be ${dispositions.size} total dispositions.")
@@ -116,6 +117,7 @@ class AggregateReportPublisher extends HmdaActor with LoanApplicationRegisterCas
     dispositions.map { disp =>
       disp.calculateValueDisposition(larSource).map(println)
     }
+    */
 
     /* metadata looks fine
     aggregateReports.map { report =>
@@ -129,7 +131,6 @@ class AggregateReportPublisher extends HmdaActor with LoanApplicationRegisterCas
     }
     */
 
-    /* TODO: Try income and identity filters
     //val larsReportingIncome = larSource.filter(lar => Try(lar.applicant.income.toDouble).isSuccess)
     val larsReportingIncome = larSource.filter { lar =>
       lar.applicant.income != "NA" && lar.geography.msa != "NA"
@@ -179,6 +180,7 @@ class AggregateReportPublisher extends HmdaActor with LoanApplicationRegisterCas
       println(s"# of Lars in MSA 12060 with GreaterThan120Percent: $total")
     }
 
+    /* TODO: Try identity filters
     val ethnicities = EthnicityEnum.values
     ethnicities.map { eth =>
       count(EthnicityUtil.filterEthnicity(larSource, eth)).map { total =>
