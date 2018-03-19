@@ -101,7 +101,6 @@ class AggregateReportPublisher extends HmdaActor with LoanApplicationRegisterCas
   private def checkFilters = {
     val larSource = readData(1000)
 
-    /* dispositions don't stall...
     val dispositions = List(
       FannieMae, FreddieMac, GinnieMae, FarmerMac, PrivateSecuritization, CommercialBank, FinanceCompany, Affiliate, OtherPurchaser,
       DebtToIncomeRatio, EmploymentHistory, CreditHistory, Collateral, InsufficientCash, UnverifiableInformation, CreditAppIncomplete, MortgageInsuranceDenied, OtherDenialReason, TotalDenied,
@@ -117,9 +116,7 @@ class AggregateReportPublisher extends HmdaActor with LoanApplicationRegisterCas
     dispositions.map { disp =>
       disp.calculateValueDisposition(larSource).map(println)
     }
-    */
 
-    /* Fetching MetaData looks fine??
     aggregateReports.map { report =>
       val meta = ReportsMetaDataLookup.values(report.reportId)
       println(s"${meta.reportType} - ${meta.reportTable} - ${meta.description}")
@@ -129,9 +126,7 @@ class AggregateReportPublisher extends HmdaActor with LoanApplicationRegisterCas
       val meta = ReportsMetaDataLookup.values(report.reportId)
       println(s"${meta.reportType} - ${meta.reportTable} - ${meta.description}")
     }
-    */
 
-    /* Income filters look fine?
     //val larsReportingIncome = larSource.filter(lar => Try(lar.applicant.income.toDouble).isSuccess)
     val larsReportingIncome = larSource.filter { lar =>
       lar.applicant.income != "NA" && lar.geography.msa != "NA"
@@ -180,9 +175,7 @@ class AggregateReportPublisher extends HmdaActor with LoanApplicationRegisterCas
     count(incomeIntervalsMSA(GreaterThan120PercentOfMSAMedian)).map { total =>
       println(s"# of Lars in MSA 12060 with GreaterThan120Percent: $total")
     }
-    */
 
-    /*  Identity filters look fine?
     val ethnicities = EthnicityEnum.values
     ethnicities.map { eth =>
       count(EthnicityUtil.filterEthnicity(larSource, eth)).map { total =>
@@ -210,7 +203,6 @@ class AggregateReportPublisher extends HmdaActor with LoanApplicationRegisterCas
         println(s"GENDER: # of LARs with $g: $total")
       }
     }
-    */
 
   }
 

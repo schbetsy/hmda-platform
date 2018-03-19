@@ -18,6 +18,7 @@ case class AggregateReportPayload(
 trait AggregateReport {
 
   val reportType: ReportTypeEnum = Aggregate
+  val reportId: String
 
   def generate[ec: EC, mat: MAT, as: AS](
     larSource: Source[LoanApplicationRegister, NotUsed],
