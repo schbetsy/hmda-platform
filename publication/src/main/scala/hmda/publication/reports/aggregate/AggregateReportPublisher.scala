@@ -93,7 +93,7 @@ class AggregateReportPublisher extends HmdaActor with LoanApplicationRegisterCas
     val msaList = MsaIncomeLookup.everyFips.toList
 
     //val combinations = combine(msaList, aggregateReports) ++ combine(List(-1), nationalAggregateReports)
-    val combinations = combine(List(16974, 12060), List(A9))
+    val combinations = combine(List(16974, 12060), List(A81))
 
     val simpleReportFlow: Flow[(Int, AggregateReport), AggregateReportPayload, NotUsed] =
       Flow[(Int, AggregateReport)].mapAsyncUnordered(1) {
