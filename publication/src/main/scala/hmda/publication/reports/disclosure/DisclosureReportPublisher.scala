@@ -106,6 +106,7 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
     case _ => //do nothing
   }
 
+  /*
   def s3Flow(institution: Institution): Flow[DisclosureReportPayload, CompletionStage[MultipartUploadResult], NotUsed] =
     Flow[DisclosureReportPayload].map(payload => {
 
@@ -125,6 +126,7 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
     Flow[(Int, DisclosureReport)].mapAsync(1) {
       case (msa, report) => report.generate(larSource, msa, institution, msaList)
     }
+    */
 
   private def generateReports(institutionId: String): Future[Unit] = {
     for {
@@ -141,11 +143,14 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
         .via(byteStringToLarFlow)
 
       val combinations = combine(msaList, reports) ++ combine(List(-1), nationwideReports)
+      println(combinations)
 
+      /*
       val reportFlow = simpleReportFlow(larSource, institution, msaList)
       val publishFlow = s3Flow(institution)
 
       Source(combinations).via(reportFlow).via(publishFlow).runWith(Sink.ignore)
+      */
     }
   }
 
