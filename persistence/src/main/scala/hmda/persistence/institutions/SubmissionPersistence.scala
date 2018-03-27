@@ -17,6 +17,7 @@ object SubmissionPersistence {
   case class GetSubmissionById(id: SubmissionId) extends Command
   case class GetSubmissionStatus(id: SubmissionId) extends Command
   case object GetLatestSubmission extends Command
+  case object GetLatestAcceptedSubmission extends Command
 
   def props(institutionId: String, period: String): Props = Props(new SubmissionPersistence(institutionId, period))
 
@@ -120,6 +121,10 @@ class SubmissionPersistence(institutionId: String, period: String) extends HmdaP
     case GetLatestSubmission =>
       val latest = state.submissions.headOption.getOrElse(Submission(SubmissionId(), Failed("No submission found"), 0L, 0L))
       sender() ! latest
+
+    case GetLatestAcceptedSubmission =>
+      val latestSigned = state.submissions.find(_.status == Signed)
+      sender() ! latestSigned
 
     case GetState =>
       sender() ! state.submissions.sortWith(_.id.sequenceNumber > _.id.sequenceNumber)

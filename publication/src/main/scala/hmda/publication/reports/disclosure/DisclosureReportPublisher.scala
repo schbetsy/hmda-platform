@@ -9,15 +9,17 @@ import akka.cluster.pubsub.DistributedPubSubMediator.{ Subscribe, SubscribeAck }
 import akka.pattern.ask
 import akka.stream.{ ActorMaterializer, ActorMaterializerSettings, Supervision }
 import akka.stream.Supervision._
+import akka.stream.alpakka.s3.javadsl.MultipartUploadResult
 import akka.stream.alpakka.s3.javadsl.S3Client
 import akka.stream.alpakka.s3.{ MemoryBufferType, S3Settings }
+import akka.stream.scaladsl.Framing
 import akka.stream.scaladsl.{ Flow, Sink, Source }
 import akka.util.{ ByteString, Timeout }
 import com.amazonaws.auth.{ AWSStaticCredentialsProvider, BasicAWSCredentials }
 import hmda.census.model.Msa
-import hmda.model.fi.SubmissionId
+import hmda.model.fi.{ Submission, SubmissionId }
 import hmda.model.institution.Institution
-import hmda.persistence.HmdaSupervisor.FindProcessingActor
+import hmda.persistence.HmdaSupervisor.{ FindProcessingActor, FindSubmissions }
 import hmda.persistence.messages.commands.institutions.InstitutionCommands.GetInstitutionById
 import hmda.persistence.messages.events.pubsub.PubSubEvents.SubmissionSignedPubSub
 import hmda.persistence.model.HmdaActor
@@ -27,8 +29,10 @@ import hmda.persistence.processing.{ PubSubTopics, SubmissionManager }
 import hmda.query.repository.filing.LoanApplicationRegisterCassandraRepository
 import hmda.validation.messages.ValidationStatsMessages.FindIrsStats
 import hmda.validation.stats.SubmissionLarStats
-import akka.stream.alpakka.s3.javadsl.MultipartUploadResult
-import hmda.persistence.institutions.InstitutionPersistence
+import hmda.model.fi.lar.LoanApplicationRegister
+import hmda.parser.fi.lar.LarCsvParser
+import hmda.persistence.institutions.SubmissionPersistence.GetLatestAcceptedSubmission
+import hmda.persistence.institutions.{ InstitutionPersistence, SubmissionPersistence }
 import hmda.persistence.messages.commands.publication.PublicationCommands.GenerateDisclosureReports
 
 import scala.concurrent.Future
@@ -95,42 +99,67 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
 
     case GenerateDisclosureReports(submissionId) =>
       log.info(s"Generating disclosure reports for ${submissionId.toString}")
-      generateReports(submissionId)
+      // Ignore period and sequence number in submission id. Only use institutionID
+      // the generateReports method uses period 2017 and the latest signed submission for this institution.
+      generateReports(submissionId.institutionId)
 
     case _ => //do nothing
   }
 
-  private def generateReports(submissionId: SubmissionId): Future[Unit] = {
-    val futures = for {
-      i <- getInstitution(submissionId.institutionId).mapTo[Institution]
-      irs <- getMSAFromIRS(submissionId)
-    } yield (i, irs)
+  def s3Flow(institution: Institution): Flow[DisclosureReportPayload, CompletionStage[MultipartUploadResult], NotUsed] =
+    Flow[DisclosureReportPayload].map(payload => {
 
-    futures.map(f => {
-      val institution = f._1
-      val msaList = f._2.toList
+      val filePath = s"$environment/reports/disclosure/2017/${institution.respondent.name}/${payload.msa}/${payload.reportID}.txt"
 
-      val larSource = readData(1000)
-        .filter(lar => lar.respondentId == institution.respondentId)
+      log.info(s"Publishing report. Institution: ${institution.id}, MSA: ${payload.msa}, Report #: ${payload.reportID}")
+
+      Source.single(ByteString(payload.report)).runWith(s3Client.multipartUpload(bucket, filePath))
+
+    })
+
+  def simpleReportFlow(
+    larSource: Source[LoanApplicationRegister, NotUsed],
+    institution: Institution,
+    msaList: List[Int]
+  ): Flow[(Int, DisclosureReport), DisclosureReportPayload, NotUsed] =
+    Flow[(Int, DisclosureReport)].mapAsync(1) {
+      case (msa, report) => report.generate(larSource, msa, institution, msaList)
+    }
+
+  private def generateReports(institutionId: String): Future[Unit] = {
+    for {
+      institution <- getInstitution(institutionId)
+      subId <- getLatestAcceptedSubmissionId(institutionId)
+      msas <- getMSAFromIRS(subId)
+    } yield {
+      val msaList = msas.toList
+
+      val sourceFileName = s"prod/lar/$institutionId.txt"
+      val larSource = s3Client
+        .download(bucket, sourceFileName)
+        .via(framing)
+        .via(byteStringToLarFlow)
 
       val combinations = combine(msaList, reports) ++ combine(List(-1), nationwideReports)
 
-      val simpleReportFlow: Flow[(Int, DisclosureReport), DisclosureReportPayload, NotUsed] =
-        Flow[(Int, DisclosureReport)]
-          .mapAsyncUnordered(1)(comb => comb._2.generate(larSource, comb._1, institution, msaList))
+      val reportFlow = simpleReportFlow(larSource, institution, msaList)
+      val publishFlow = s3Flow(institution)
 
-      val s3Flow: Flow[DisclosureReportPayload, CompletionStage[MultipartUploadResult], NotUsed] =
-        Flow[DisclosureReportPayload]
-          .map(payload => {
-            val filePath = s"$environment/reports/disclosure/${submissionId.period}/${institution.respondent.name}/${payload.msa}/${payload.reportID}.txt"
-            log.info(s"Publishing report. Institution: ${institution.id}, MSA: ${payload.msa}, Report #: ${payload.reportID}")
-            Source.single(ByteString(payload.report))
-              .runWith(s3Client.multipartUpload(bucket, filePath))
-          })
-
-      Source(combinations).via(simpleReportFlow).via(s3Flow).runWith(Sink.ignore)
-    })
+      Source(combinations).via(reportFlow).via(publishFlow).runWith(Sink.ignore)
+    }
   }
+
+  def framing: Flow[ByteString, ByteString, NotUsed] = {
+    Framing.delimiter(ByteString("\n"), maximumFrameLength = 65536, allowTruncation = true)
+  }
+
+  val byteStringToLarFlow: Flow[ByteString, LoanApplicationRegister, NotUsed] =
+    Flow[ByteString]
+      .map(s => LarCsvParser(s.utf8String) match {
+        case Right(lar) =>
+          println(s"LAR: \t\t${lar.loan.id}")
+          lar
+      })
 
   /**
    * Returns all combinations of MSA and Disclosure Reports
@@ -143,25 +172,41 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
     })
   }
 
+  val supervisor = system.actorSelection("/user/supervisor/singleton")
+
   private def getInstitution(institutionId: String): Future[Institution] = {
-    val supervisor = system.actorSelection("/user/supervisor/singleton")
     val fInstitutionsActor = (supervisor ? FindActorByName(InstitutionPersistence.name)).mapTo[ActorRef]
     for {
-      a <- fInstitutionsActor
-      i <- (a ? GetInstitutionById(institutionId)).mapTo[Option[Institution]]
+      instPersistence <- fInstitutionsActor
+      i <- (instPersistence ? GetInstitutionById(institutionId)).mapTo[Option[Institution]]
     } yield {
-      i.getOrElse(Institution.empty)
+      val inst = i.getOrElse(Institution.empty)
+      println(inst)
+      inst
+    }
+  }
+
+  private def getLatestAcceptedSubmissionId(institutionId: String): Future[SubmissionId] = {
+    val submissionPersistence = (supervisor ? FindSubmissions(SubmissionPersistence.name, institutionId, "2017")).mapTo[ActorRef]
+    for {
+      subPersistence <- submissionPersistence
+      latestAccepted <- (subPersistence ? GetLatestAcceptedSubmission).mapTo[Submission]
+    } yield {
+      val subId = latestAccepted.id
+      println(subId)
+      subId
     }
   }
 
   private def getMSAFromIRS(submissionId: SubmissionId): Future[Seq[Int]] = {
-    val supervisor = system.actorSelection("/user/supervisor/singleton")
     for {
       manager <- (supervisor ? FindProcessingActor(SubmissionManager.name, submissionId)).mapTo[ActorRef]
       larStats <- (manager ? GetActorRef(SubmissionLarStats.name)).mapTo[ActorRef]
       stats <- (larStats ? FindIrsStats(submissionId)).mapTo[Seq[Msa]]
     } yield {
-      stats.filter(m => m.id != "NA").map(m => m.id.toInt)
+      val msas = stats.filter(m => m.id != "NA").map(m => m.id.toInt)
+      println(msas)
+      msas
     }
   }
 
