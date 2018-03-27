@@ -9,8 +9,8 @@ import akka.cluster.pubsub.DistributedPubSubMediator.{ Subscribe, SubscribeAck }
 import akka.pattern.ask
 import akka.stream.{ ActorMaterializer, ActorMaterializerSettings, Supervision }
 import akka.stream.Supervision._
-import akka.stream.alpakka.s3.javadsl.MultipartUploadResult
-import akka.stream.alpakka.s3.javadsl.S3Client
+import akka.stream.alpakka.s3.scaladsl.MultipartUploadResult
+import akka.stream.alpakka.s3.scaladsl.S3Client
 import akka.stream.alpakka.s3.{ MemoryBufferType, S3Settings }
 import akka.stream.scaladsl.Framing
 import akka.stream.scaladsl.{ Flow, Sink, Source }
@@ -71,7 +71,7 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
     new BasicAWSCredentials(accessKeyId, secretAccess)
   )
   val awsSettings = new S3Settings(MemoryBufferType, None, awsCredentials, region, false)
-  val s3Client = new S3Client(awsSettings, context.system, materializer)
+  val s3Client = new S3Client(awsSettings)
 
   val reports = List(
     D1, D2,
@@ -106,17 +106,14 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
     case _ => //do nothing
   }
 
-  /*
-  def s3Flow(institution: Institution): Flow[DisclosureReportPayload, CompletionStage[MultipartUploadResult], NotUsed] =
-    Flow[DisclosureReportPayload].map(payload => {
-
+  def s3Flow(institution: Institution): Flow[DisclosureReportPayload, Future[MultipartUploadResult], NotUsed] =
+    Flow[DisclosureReportPayload].map { payload =>
       val filePath = s"$environment/reports/disclosure/2017/${institution.respondent.name}/${payload.msa}/${payload.reportID}.txt"
 
       log.info(s"Publishing report. Institution: ${institution.id}, MSA: ${payload.msa}, Report #: ${payload.reportID}")
 
       Source.single(ByteString(payload.report)).runWith(s3Client.multipartUpload(bucket, filePath))
-
-    })
+    }
 
   def simpleReportFlow(
     larSource: Source[LoanApplicationRegister, NotUsed],
@@ -126,7 +123,6 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
     Flow[(Int, DisclosureReport)].mapAsync(1) {
       case (msa, report) => report.generate(larSource, msa, institution, msaList)
     }
-    */
 
   private def generateReports(institutionId: String): Future[Unit] = {
     for {
@@ -137,20 +133,17 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
       val msaList = msas.toList
 
       val sourceFileName = s"prod/lar/$institutionId.txt"
-      val larSource = s3Client
+      val larSource: Source[LoanApplicationRegister, NotUsed] = s3Client
         .download(bucket, sourceFileName)
         .via(framing)
         .via(byteStringToLarFlow)
 
       val combinations = combine(msaList, reports) ++ combine(List(-1), nationwideReports)
-      println(combinations)
 
-      /*
       val reportFlow = simpleReportFlow(larSource, institution, msaList)
       val publishFlow = s3Flow(institution)
 
       Source(combinations).via(reportFlow).via(publishFlow).runWith(Sink.ignore)
-      */
     }
   }
 
@@ -195,9 +188,9 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
     val submissionPersistence = (supervisor ? FindSubmissions(SubmissionPersistence.name, institutionId, "2017")).mapTo[ActorRef]
     for {
       subPersistence <- submissionPersistence
-      latestAccepted <- (subPersistence ? GetLatestAcceptedSubmission).mapTo[Submission]
+      latestAccepted <- (subPersistence ? GetLatestAcceptedSubmission).mapTo[Option[Submission]]
     } yield {
-      val subId = latestAccepted.id
+      val subId = latestAccepted.get.id
       println(subId)
       subId
     }
