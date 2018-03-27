@@ -108,13 +108,13 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
 
     futures.map(f => {
       val institution = f._1
-      val msaList = f._2.toList
+      //val msaList = f._2.toList
+      val msaList = List(16974)
 
       val larSource = readData(1000)
         .filter(lar => lar.respondentId == institution.respondentId)
 
-      //val combinations = combine(msaList, reports) ++ combine(List(-1), nationwideReports)
-      val combinations = List((16974, D11_1), (16974, D12_2))
+      val combinations = combine(msaList, reports) ++ combine(List(-1), nationwideReports)
 
       val simpleReportFlow: Flow[(Int, DisclosureReport), DisclosureReportPayload, NotUsed] =
         Flow[(Int, DisclosureReport)]
