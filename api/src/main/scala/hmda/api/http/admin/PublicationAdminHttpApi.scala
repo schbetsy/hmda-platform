@@ -36,28 +36,14 @@ trait PublicationAdminHttpApi extends HmdaCustomDirectives with ApiErrorProtocol
         timedPost { uri =>
           val submissionId = SubmissionId(instId, year.toString, subId)
 
-          val publisherRef = (publicationSupervisor ? FindDisclosurePublisher()).mapTo[ActorRef]
-          val submissionPersistenceF = (supervisor ? FindSubmissions(SubmissionPersistence.name, submissionId.institutionId, submissionId.period)).mapTo[ActorRef]
-
           val message = for {
-            submissions <- submissionPersistenceF
-            sub <- (submissions ? GetSubmissionById(submissionId)).mapTo[Submission]
-            p <- publisherRef
+            p <- (publicationSupervisor ? FindDisclosurePublisher()).mapTo[ActorRef]
           } yield {
-            if (sub.status == Signed) {
-              p ! GenerateDisclosureReports(submissionId)
-            }
-            sub
+            p ! GenerateDisclosureReports(submissionId)
           }
 
           onComplete(message) {
-            case Success(sub) =>
-              if (sub.status == Signed) {
-                complete(ToResponseMarshallable(StatusCodes.OK))
-              } else {
-                val errorResponse = ErrorResponse(400, s"Submission ${submissionId.toString} has not been signed", uri.path)
-                complete(ToResponseMarshallable(StatusCodes.BadRequest -> errorResponse))
-              }
+            case Success(sub) => complete(ToResponseMarshallable(StatusCodes.OK))
             case Failure(error) =>
               completeWithInternalError(uri, error)
           }
