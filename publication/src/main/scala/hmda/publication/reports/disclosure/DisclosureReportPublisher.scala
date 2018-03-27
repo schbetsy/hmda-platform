@@ -30,7 +30,7 @@ import hmda.query.repository.filing.LoanApplicationRegisterCassandraRepository
 import hmda.validation.messages.ValidationStatsMessages.FindIrsStats
 import hmda.validation.stats.SubmissionLarStats
 import hmda.model.fi.lar.LoanApplicationRegister
-import hmda.parser.fi.lar.LarCsvParser
+import hmda.parser.fi.lar.{ LarCsvParser, ModifiedLarCsvParser }
 import hmda.persistence.institutions.SubmissionPersistence.GetLatestAcceptedSubmission
 import hmda.persistence.institutions.{ InstitutionPersistence, SubmissionPersistence }
 import hmda.persistence.messages.commands.publication.PublicationCommands.GenerateDisclosureReports
@@ -153,7 +153,7 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
 
   val byteStringToLarFlow: Flow[ByteString, LoanApplicationRegister, NotUsed] =
     Flow[ByteString]
-      .map(s => LarCsvParser(s.utf8String) match {
+      .map(s => ModifiedLarCsvParser(s.utf8String) match {
         case Right(lar) =>
           println(s"LAR: \t\t${lar.loan.id}")
           lar
