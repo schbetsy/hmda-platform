@@ -108,13 +108,16 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
 
     futures.map(f => {
       val institution = f._1
+      println(institution)
       //val msaList = f._2.toList
       val msaList = List(16974)
+
+      val combinations = combine(msaList, reports) ++ combine(List(-1), nationwideReports)
+      println(combinations)
 
       val larSource = readData(1000)
         .filter(lar => lar.respondentId == institution.respondentId)
 
-      val combinations = combine(msaList, reports) ++ combine(List(-1), nationwideReports)
 
       val simpleReportFlow: Flow[(Int, DisclosureReport), DisclosureReportPayload, NotUsed] =
         Flow[(Int, DisclosureReport)]
@@ -162,7 +165,9 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
       larStats <- (manager ? GetActorRef(SubmissionLarStats.name)).mapTo[ActorRef]
       stats <- (larStats ? FindIrsStats(submissionId)).mapTo[Seq[Msa]]
     } yield {
-      stats.filter(m => m.id != "NA").map(m => m.id.toInt)
+      val msas = stats.filter(m => m.id != "NA").map(m => m.id.toInt)
+      println(msas)
+      msas
     }
   }
 
