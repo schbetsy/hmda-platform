@@ -42,8 +42,8 @@ trait DisclosureB extends DisclosureReport {
 
     val lars = larSource.filter { lar =>
       if (reportId == "DB") {
-        lar.geography.msa.toInt == fipsCode &&
-          lar.geography.msa != "NA"
+        lar.geography.msa != "NA" &&
+          lar.geography.msa.toInt == fipsCode
       } else true
     }.filter(filters)
 
