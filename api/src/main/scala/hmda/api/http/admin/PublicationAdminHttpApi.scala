@@ -10,18 +10,16 @@ import akka.pattern.ask
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import hmda.api.http.HmdaCustomDirectives
-import hmda.api.model.ErrorResponse
 import hmda.api.protocol.processing.ApiErrorProtocol
-import hmda.model.fi.{ Signed, Submission, SubmissionId }
-import hmda.persistence.HmdaSupervisor.FindSubmissions
-import hmda.persistence.institutions.SubmissionPersistence
-import hmda.persistence.institutions.SubmissionPersistence.GetSubmissionById
-import hmda.persistence.messages.commands.publication.PublicationCommands.{ GenerateAggregateReports, GenerateDisclosureReports }
+import hmda.api.protocol.publication.ReportDetailsProtocol
+import hmda.model.publication.ReportDetails
+import hmda.persistence.messages.commands.publication.PublicationCommands._
 import hmda.persistence.messages.events.pubsub.PubSubEvents.{ FindAggregatePublisher, FindDisclosurePublisher }
 
+import scala.concurrent.Future
 import scala.util.{ Failure, Success }
 
-trait PublicationAdminHttpApi extends HmdaCustomDirectives with ApiErrorProtocol {
+trait PublicationAdminHttpApi extends HmdaCustomDirectives with ApiErrorProtocol with ReportDetailsProtocol {
 
   implicit val system: ActorSystem
   implicit val materializer: ActorMaterializer
@@ -29,17 +27,16 @@ trait PublicationAdminHttpApi extends HmdaCustomDirectives with ApiErrorProtocol
 
   val log: LoggingAdapter
 
-  def disclosureGenerationPath(supervisor: ActorRef, publicationSupervisor: ActorRef) =
-    path("disclosure" / Segment / IntNumber / IntNumber) { (instId, year, subId) =>
+  def disclosureNationwidePath(publicationSupervisor: ActorRef) =
+    path("disclosure" / "institution" / Segment / "nationwide") { (instId) =>
       extractExecutionContext { executor =>
         implicit val ec = executor
         timedPost { uri =>
-          val submissionId = SubmissionId(instId, year.toString, subId)
 
           val message = for {
             p <- (publicationSupervisor ? FindDisclosurePublisher()).mapTo[ActorRef]
           } yield {
-            p ! GenerateDisclosureReports(submissionId)
+            p ! GenerateDisclosureNationwide(instId)
           }
 
           onComplete(message) {
@@ -51,23 +48,71 @@ trait PublicationAdminHttpApi extends HmdaCustomDirectives with ApiErrorProtocol
       }
     }
 
-  def aggregateGenerationPath(supervisor: ActorRef, publicationSupervisor: ActorRef) =
-    path("aggregate" / "2017") {
+  def disclosureMSAPath(publicationSupervisor: ActorRef) =
+    path("disclosure" / "institution" / Segment / IntNumber) { (instId, msa) =>
       extractExecutionContext { executor =>
         implicit val ec = executor
         timedPost { uri =>
-          val publisherF = (publicationSupervisor ? FindAggregatePublisher()).mapTo[ActorRef]
-          val msg = publisherF.map(_ ! GenerateAggregateReports())
 
-          onComplete(msg) {
+          val message = for {
+            p <- (publicationSupervisor ? FindDisclosurePublisher()).mapTo[ActorRef]
+          } yield {
+            p ! GenerateDisclosureForMSA(instId, msa)
+          }
+
+          onComplete(message) {
             case Success(sub) => complete(ToResponseMarshallable(StatusCodes.OK))
-            case Failure(error) => completeWithInternalError(uri, error)
+            case Failure(error) =>
+              completeWithInternalError(uri, error)
+          }
+        }
+      }
+    }
+
+  def disclosurePrepPath(publicationSupervisor: ActorRef) =
+    path("disclosure" / "info" / Segment) { (instId) =>
+      extractExecutionContext { executor =>
+        implicit val ec = executor
+        timedGet { uri =>
+
+          val details: Future[ReportDetails] = for {
+            p <- (publicationSupervisor ? FindDisclosurePublisher()).mapTo[ActorRef]
+            d <- (p ? GetReportDetails(instId)).mapTo[ReportDetails]
+          } yield d
+
+          onComplete(details) {
+            case Success(sub) => complete(ToResponseMarshallable(details))
+            case Failure(error) =>
+              completeWithInternalError(uri, error)
           }
         }
       }
     }
 
   def publicationRoutes(supervisor: ActorRef, publicationSupervisor: ActorRef) =
-    disclosureGenerationPath(supervisor, publicationSupervisor) ~ aggregateGenerationPath(supervisor, publicationSupervisor)
+    disclosurePrepPath(publicationSupervisor) ~
+      disclosureNationwidePath(publicationSupervisor) ~
+      disclosureMSAPath(publicationSupervisor)
+
+  /*
+def aggregateGenerationPath(supervisor: ActorRef, publicationSupervisor: ActorRef) =
+  path("aggregate" / "2017") {
+    extractExecutionContext { executor =>
+      implicit val ec = executor
+      timedPost { uri =>
+        val publisherF = (publicationSupervisor ? FindAggregatePublisher()).mapTo[ActorRef]
+        val msg = publisherF.map(_ ! GenerateAggregateReports())
+
+        onComplete(msg) {
+          case Success(sub) => complete(ToResponseMarshallable(StatusCodes.OK))
+          case Failure(error) => completeWithInternalError(uri, error)
+        }
+      }
+    }
+  }
+
+def publicationRoutes(supervisor: ActorRef, publicationSupervisor: ActorRef) =
+  disclosureGenerationPath(supervisor, publicationSupervisor) ~ aggregateGenerationPath(supervisor, publicationSupervisor)
+  */
 
 }

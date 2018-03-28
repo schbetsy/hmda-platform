@@ -28,10 +28,11 @@ import hmda.query.repository.filing.LoanApplicationRegisterCassandraRepository
 import hmda.validation.messages.ValidationStatsMessages.FindIrsStats
 import hmda.validation.stats.SubmissionLarStats
 import hmda.model.fi.lar.LoanApplicationRegister
+import hmda.model.publication.ReportDetails
 import hmda.parser.fi.lar.{ LarCsvParser, ModifiedLarCsvParser }
 import hmda.persistence.institutions.SubmissionPersistence.GetLatestAcceptedSubmission
 import hmda.persistence.institutions.{ InstitutionPersistence, SubmissionPersistence }
-import hmda.persistence.messages.commands.publication.PublicationCommands.GenerateDisclosureReports
+import hmda.persistence.messages.commands.publication.PublicationCommands.{ GenerateDisclosureForMSA, GenerateDisclosureNationwide, GenerateDisclosureReports, GetReportDetails }
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -95,16 +96,51 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
     case SubmissionSignedPubSub(submissionId) =>
     //self ! GenerateDisclosureReports(submissionId)
 
+    /*
     case GenerateDisclosureReports(submissionId) =>
       log.info(s"Generating disclosure reports for ${submissionId.institutionId}")
       // Ignore period and sequence number in submission id. Only use institutionID
       // the generateReports method uses period 2017 and the latest signed submission for this institution.
       generateReports(submissionId.institutionId)
+      */
+
+    case GenerateDisclosureNationwide(institutionId) =>
+      generateNationwideReports(institutionId)
+
+    case GenerateDisclosureForMSA(institutionId, msa) =>
+      generateMSAReports(institutionId, msa)
+
+    case GetReportDetails(institutionId) =>
+      println(s"Getting report details for $institutionId")
+      val sndr: ActorRef = sender()
+      for {
+        details <- getReportDetails(institutionId)
+      } yield {
+        sndr ! details
+      }
 
     case _ => //do nothing
   }
 
-  private def generateReports(institutionId: String): Future[Unit] = {
+  private def generateMSAReports(institutionId: String, msa: Int): Future[Unit] = {
+    val larSeqF: Future[Seq[LoanApplicationRegister]] = s3Source(institutionId).runWith(Sink.seq)
+
+    for {
+      larSeq <- larSeqF
+      institution <- getInstitution(institutionId)
+    } yield {
+
+      val larSource: Source[LoanApplicationRegister, NotUsed] = Source.fromIterator(() => larSeq.toIterator)
+      val msaList = List(msa)
+      val combinations = combine(msaList, reports)
+
+      val reportFlow = simpleReportFlow(larSource, institution, msaList)
+      val publishFlow = s3Flow(institution)
+
+      Source(combinations).via(reportFlow).via(publishFlow).runWith(Sink.ignore)
+    }
+  }
+  private def generateNationwideReports(institutionId: String): Future[Unit] = {
     val larSeqF: Future[Seq[LoanApplicationRegister]] = s3Source(institutionId).runWith(Sink.seq)
     for {
       institution <- getInstitution(institutionId)
@@ -114,17 +150,14 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
     } yield {
 
       val msaList = msas.toList
-
       val larSource: Source[LoanApplicationRegister, NotUsed] = Source.fromIterator(() => larSeq.toIterator)
 
-      val combinations = combine(msaList, reports) ++ combine(List(-1), nationwideReports)
-      //val combinations = combine(List(-1), nationwideReports)
+      val combinations = combine(List(-1), nationwideReports)
 
       val reportFlow = simpleReportFlow(larSource, institution, msaList)
       val publishFlow = s3Flow(institution)
 
       Source(combinations).via(reportFlow).via(publishFlow).runWith(Sink.ignore)
-      //Source(combinations).via(reportFlow).runWith(Sink.ignore)
     }
   }
 
@@ -144,7 +177,7 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
   ): Flow[(Int, DisclosureReport), DisclosureReportPayload, NotUsed] =
     Flow[(Int, DisclosureReport)].mapAsync(1) {
       case (msa, report) =>
-        println(s"Generating report ${report.reportId} for msa $msa")
+        //println(s"Generating report ${report.reportId} for msa $msa")
         report.generate(larSource, msa, institution, msaList)
     }
 
@@ -179,21 +212,35 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
     })
   }
 
+  private def getReportDetails(institutionId: String): Future[ReportDetails] = {
+    for {
+      institution <- getInstitution(institutionId)
+      subId <- getLatestAcceptedSubmissionId(institutionId)
+      msas <- getMSAFromIRS(subId)
+    } yield {
+      val rd = ReportDetails(institution.respondent.name, subId, msas.size, msas)
+      println(rd)
+      rd
+    }
+  }
+
   val supervisor = system.actorSelection("/user/supervisor/singleton")
 
   private def getInstitution(institutionId: String): Future[Institution] = {
+    println(s"get institution $institutionId")
     val fInstitutionsActor = (supervisor ? FindActorByName(InstitutionPersistence.name)).mapTo[ActorRef]
     for {
       instPersistence <- fInstitutionsActor
       i <- (instPersistence ? GetInstitutionById(institutionId)).mapTo[Option[Institution]]
     } yield {
       val inst = i.getOrElse(Institution.empty)
-      println(s"Institution name: " + inst.respondent.name)
+      //println(s"Institution name: " + inst.respondent.name)
       inst
     }
   }
 
   private def getLatestAcceptedSubmissionId(institutionId: String): Future[SubmissionId] = {
+    println(s"get latest accepted submission $institutionId")
     val submissionPersistence = (supervisor ? FindSubmissions(SubmissionPersistence.name, institutionId, "2017")).mapTo[ActorRef]
     for {
       subPersistence <- submissionPersistence
@@ -206,6 +253,7 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
   }
 
   private def getMSAFromIRS(submissionId: SubmissionId): Future[Seq[Int]] = {
+    println("get list of MSAs")
     for {
       manager <- (supervisor ? FindProcessingActor(SubmissionManager.name, submissionId)).mapTo[ActorRef]
       larStats <- (manager ? GetActorRef(SubmissionLarStats.name)).mapTo[ActorRef]
