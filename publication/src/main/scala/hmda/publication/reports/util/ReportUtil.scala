@@ -102,10 +102,13 @@ object ReportUtil extends SourceUtils {
   }
 
   def calculateYear[ec: EC, mat: MAT, as: AS](larSource: Source[LoanApplicationRegister, NotUsed]): Future[Int] = {
+    /*
     collectHeadValue(larSource).map {
       case Success(lar) => lar.actionTakenDate.toString.substring(0, 4).toInt
       case _ => 0
     }
+    */
+    Future(2017)
   }
 
   def calculateDispositions[ec: EC, mat: MAT, as: AS](

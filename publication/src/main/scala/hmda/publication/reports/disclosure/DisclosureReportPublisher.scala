@@ -1,7 +1,5 @@
 package hmda.publication.reports.disclosure
 
-import java.util.concurrent.CompletionStage
-
 import akka.NotUsed
 import akka.actor.{ ActorRef, ActorSystem, Props }
 import akka.cluster.pubsub.DistributedPubSub
@@ -121,7 +119,9 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
     msaList: List[Int]
   ): Flow[(Int, DisclosureReport), DisclosureReportPayload, NotUsed] =
     Flow[(Int, DisclosureReport)].mapAsync(1) {
-      case (msa, report) => report.generate(larSource, msa, institution, msaList)
+      case (msa, report) =>
+        println(s"Generating report ${report.reportId} for msa $msa")
+        report.generate(larSource, msa, institution, msaList)
     }
 
   private def generateReports(institutionId: String): Future[Unit] = {
@@ -139,11 +139,13 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
         .via(byteStringToLarFlow)
 
       val combinations = combine(msaList, reports) ++ combine(List(-1), nationwideReports)
+      println(combinations)
 
       val reportFlow = simpleReportFlow(larSource, institution, msaList)
       val publishFlow = s3Flow(institution)
 
       Source(combinations).via(reportFlow).via(publishFlow).runWith(Sink.ignore)
+      //Source(combinations).via(reportFlow).runWith(Sink.ignore)
     }
   }
 
@@ -155,7 +157,7 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
     Flow[ByteString]
       .map(s => ModifiedLarCsvParser(s.utf8String) match {
         case Right(lar) =>
-          println(s"LAR: \t\t${lar.loan.id}")
+          //println(s"LAR: \t\t${lar.toCSV}")
           lar
       })
 

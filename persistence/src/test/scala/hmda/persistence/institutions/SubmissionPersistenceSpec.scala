@@ -75,6 +75,14 @@ class SubmissionPersistenceSpec extends ActorSpec {
       subs(1).id.sequenceNumber mustBe 2
       subs(2).id.sequenceNumber mustBe 1
     }
+
+    /*
+    "get latest accepted submission" in {
+      probe.send(submissionsActor, GetLatestAcceptedSubmission)
+      val thing = probe.expectMsgType[Option[Submission]]
+      thing mustBe Some(Submission())
+    }
+    */
   }
 
 }

@@ -12,6 +12,8 @@ import scala.concurrent.Future
 
 trait DisclosureReport {
 
+  val reportId: String
+
   val reportType: ReportTypeEnum = Disclosure
 
   def generate[ec: EC, mat: MAT, as: AS](
