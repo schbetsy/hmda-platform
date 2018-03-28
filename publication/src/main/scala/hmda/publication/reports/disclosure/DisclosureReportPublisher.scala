@@ -124,22 +124,29 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
         report.generate(larSource, msa, institution, msaList)
     }
 
+  def s3Source(institutionId: String): Source[LoanApplicationRegister, NotUsed] = {
+    val sourceFileName = s"prod/lar/$institutionId.txt"
+    s3Client
+      .download(bucket, sourceFileName)
+      .via(framing)
+      .via(byteStringToLarFlow)
+  }
+
   private def generateReports(institutionId: String): Future[Unit] = {
+    val larSeqF: Future[Seq[LoanApplicationRegister]] = s3Source(institutionId).runWith(Sink.seq)
     for {
       institution <- getInstitution(institutionId)
       subId <- getLatestAcceptedSubmissionId(institutionId)
       msas <- getMSAFromIRS(subId)
+      larSeq <- larSeqF
     } yield {
+
       val msaList = msas.toList
 
-      val sourceFileName = s"prod/lar/$institutionId.txt"
-      val larSource: Source[LoanApplicationRegister, NotUsed] = s3Client
-        .download(bucket, sourceFileName)
-        .via(framing)
-        .via(byteStringToLarFlow)
+      val larSource: Source[LoanApplicationRegister, NotUsed] = Source.fromIterator(() => larSeq.toIterator)
 
       val combinations = combine(msaList, reports) ++ combine(List(-1), nationwideReports)
-      println(combinations)
+      //println(combinations)
 
       val reportFlow = simpleReportFlow(larSource, institution, msaList)
       val publishFlow = s3Flow(institution)
