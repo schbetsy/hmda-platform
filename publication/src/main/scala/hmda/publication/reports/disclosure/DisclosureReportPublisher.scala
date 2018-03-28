@@ -96,12 +96,36 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
     //self ! GenerateDisclosureReports(submissionId)
 
     case GenerateDisclosureReports(submissionId) =>
-      log.info(s"Generating disclosure reports for ${submissionId.toString}")
+      log.info(s"Generating disclosure reports for ${submissionId.institutionId}")
       // Ignore period and sequence number in submission id. Only use institutionID
       // the generateReports method uses period 2017 and the latest signed submission for this institution.
       generateReports(submissionId.institutionId)
 
     case _ => //do nothing
+  }
+
+  private def generateReports(institutionId: String): Future[Unit] = {
+    val larSeqF: Future[Seq[LoanApplicationRegister]] = s3Source(institutionId).runWith(Sink.seq)
+    for {
+      institution <- getInstitution(institutionId)
+      subId <- getLatestAcceptedSubmissionId(institutionId)
+      msas <- getMSAFromIRS(subId)
+      larSeq <- larSeqF
+    } yield {
+
+      val msaList = msas.toList
+
+      val larSource: Source[LoanApplicationRegister, NotUsed] = Source.fromIterator(() => larSeq.toIterator)
+
+      val combinations = combine(msaList, reports) ++ combine(List(-1), nationwideReports)
+      //val combinations = combine(List(-1), nationwideReports)
+
+      val reportFlow = simpleReportFlow(larSource, institution, msaList)
+      val publishFlow = s3Flow(institution)
+
+      Source(combinations).via(reportFlow).via(publishFlow).runWith(Sink.ignore)
+      //Source(combinations).via(reportFlow).runWith(Sink.ignore)
+    }
   }
 
   def s3Flow(institution: Institution): Flow[DisclosureReportPayload, Future[MultipartUploadResult], NotUsed] =
@@ -130,30 +154,6 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
       .download(bucket, sourceFileName)
       .via(framing)
       .via(byteStringToLarFlow)
-  }
-
-  private def generateReports(institutionId: String): Future[Unit] = {
-    val larSeqF: Future[Seq[LoanApplicationRegister]] = s3Source(institutionId).runWith(Sink.seq)
-    for {
-      institution <- getInstitution(institutionId)
-      subId <- getLatestAcceptedSubmissionId(institutionId)
-      msas <- getMSAFromIRS(subId)
-      larSeq <- larSeqF
-    } yield {
-
-      val msaList = msas.toList
-
-      val larSource: Source[LoanApplicationRegister, NotUsed] = Source.fromIterator(() => larSeq.toIterator)
-
-      val combinations = combine(msaList, reports) ++ combine(List(-1), nationwideReports)
-      //println(combinations)
-
-      val reportFlow = simpleReportFlow(larSource, institution, msaList)
-      val publishFlow = s3Flow(institution)
-
-      Source(combinations).via(reportFlow).via(publishFlow).runWith(Sink.ignore)
-      //Source(combinations).via(reportFlow).runWith(Sink.ignore)
-    }
   }
 
   def framing: Flow[ByteString, ByteString, NotUsed] = {
@@ -188,7 +188,7 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
       i <- (instPersistence ? GetInstitutionById(institutionId)).mapTo[Option[Institution]]
     } yield {
       val inst = i.getOrElse(Institution.empty)
-      println(inst)
+      println(s"Institution name: " + inst.respondent.name)
       inst
     }
   }
@@ -200,7 +200,7 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
       latestAccepted <- (subPersistence ? GetLatestAcceptedSubmission).mapTo[Option[Submission]]
     } yield {
       val subId = latestAccepted.get.id
-      println(subId)
+      println("submission ID: " + subId)
       subId
     }
   }
@@ -212,7 +212,7 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
       stats <- (larStats ? FindIrsStats(submissionId)).mapTo[Seq[Msa]]
     } yield {
       val msas = stats.filter(m => m.id != "NA").map(m => m.id.toInt)
-      println(msas)
+      println(s"${msas.size} msas: " + msas)
       msas
     }
   }
