@@ -162,7 +162,7 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
 
   def s3Flow(institution: Institution): Flow[DisclosureReportPayload, Future[MultipartUploadResult], NotUsed] =
     Flow[DisclosureReportPayload].map { payload =>
-      val filePath = s"$environment/reports/disclosure/2017/${institution.respondent.name}/${payload.msa}/${payload.reportID}.txt"
+      val filePath = s"$environment/reports/disclosure/2017/${institution.id}/${payload.msa}/${payload.reportID}.txt"
 
       log.info(s"Publishing report. Institution: ${institution.id}, MSA: ${payload.msa}, Report #: ${payload.reportID}")
 
