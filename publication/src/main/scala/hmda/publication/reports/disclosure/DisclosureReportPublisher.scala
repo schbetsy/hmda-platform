@@ -111,7 +111,6 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
       generateMSAReports(institutionId, msa)
 
     case GetReportDetails(institutionId) =>
-      println(s"Getting report details for $institutionId")
       val sndr: ActorRef = sender()
       for {
         details <- getReportDetails(institutionId)
@@ -227,7 +226,6 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
   val supervisor = system.actorSelection("/user/supervisor/singleton")
 
   private def getInstitution(institutionId: String): Future[Institution] = {
-    println(s"get institution $institutionId")
     val fInstitutionsActor = (supervisor ? FindActorByName(InstitutionPersistence.name)).mapTo[ActorRef]
     for {
       instPersistence <- fInstitutionsActor
@@ -240,20 +238,17 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
   }
 
   private def getLatestAcceptedSubmissionId(institutionId: String): Future[SubmissionId] = {
-    println(s"get latest accepted submission $institutionId")
     val submissionPersistence = (supervisor ? FindSubmissions(SubmissionPersistence.name, institutionId, "2017")).mapTo[ActorRef]
     for {
       subPersistence <- submissionPersistence
       latestAccepted <- (subPersistence ? GetLatestAcceptedSubmission).mapTo[Option[Submission]]
     } yield {
       val subId = latestAccepted.get.id
-      println("submission ID: " + subId)
       subId
     }
   }
 
   private def getMSAFromIRS(submissionId: SubmissionId): Future[Seq[Int]] = {
-    println("get list of MSAs")
     for {
       manager <- (supervisor ? FindProcessingActor(SubmissionManager.name, submissionId)).mapTo[ActorRef]
       larStats <- (manager ? GetActorRef(SubmissionLarStats.name)).mapTo[ActorRef]
