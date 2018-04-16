@@ -1,6 +1,6 @@
 package hmda.publication.reports.disclosure
 
-import akka.NotUsed
+import akka.{ Done, NotUsed }
 import akka.actor.{ ActorRef, ActorSystem, Props }
 import akka.cluster.pubsub.DistributedPubSub
 import akka.cluster.pubsub.DistributedPubSubMediator.{ Subscribe, SubscribeAck }
@@ -32,9 +32,9 @@ import hmda.model.publication.ReportDetails
 import hmda.parser.fi.lar.{ LarCsvParser, ModifiedLarCsvParser }
 import hmda.persistence.institutions.SubmissionPersistence.GetLatestAcceptedSubmission
 import hmda.persistence.institutions.{ InstitutionPersistence, SubmissionPersistence }
-import hmda.persistence.messages.commands.publication.PublicationCommands.{ GenerateDisclosureForMSA, GenerateDisclosureNationwide, GenerateDisclosureReports, GetReportDetails }
+import hmda.persistence.messages.commands.publication.PublicationCommands._
 
-import scala.concurrent.Future
+import scala.concurrent.{ Await, Future }
 import scala.concurrent.duration._
 
 object DisclosureReportPublisher {
@@ -110,6 +110,9 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
     case GenerateDisclosureForMSA(institutionId, msa) =>
       generateMSAReports(institutionId, msa)
 
+    case PublishIndividualReport(institutionId, msa, report) =>
+      publishIndividualReport(institutionId, msa, reportByName(report))
+
     case GetReportDetails(institutionId) =>
       val sndr: ActorRef = sender()
       for {
@@ -119,6 +122,25 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
       }
 
     case _ => //do nothing
+  }
+
+  private def publishIndividualReport(institutionId: String, msa: Int, report: DisclosureReport) = {
+    val larSeqF: Future[Seq[LoanApplicationRegister]] = s3Source(institutionId).runWith(Sink.seq)
+
+    for {
+      larSeq <- larSeqF
+      institution <- getInstitution(institutionId)
+    } yield {
+
+      val larSource: Source[LoanApplicationRegister, NotUsed] = Source.fromIterator(() => larSeq.toIterator)
+      val msaList = List(msa)
+      val combinations = combine(msaList, List(report))
+
+      val reportFlow = simpleReportFlow(larSource, institution, msaList)
+      val publishFlow = s3Flow(institution)
+
+      Source(combinations).via(reportFlow).via(publishFlow).runWith(Sink.ignore)
+    }
   }
 
   private def generateMSAReports(institutionId: String, msa: Int): Future[Unit] = {
@@ -181,7 +203,7 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
     }
 
   def s3Source(institutionId: String): Source[LoanApplicationRegister, NotUsed] = {
-    val sourceFileName = s"prod/lar/$institutionId.txt"
+    val sourceFileName = s"prod/modified-lar/2017/$institutionId.txt"
     s3Client
       .download(bucket, sourceFileName)
       .via(framing)
@@ -255,9 +277,63 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
       stats <- (larStats ? FindIrsStats(submissionId)).mapTo[Seq[Msa]]
     } yield {
       val msas = stats.filter(m => m.id != "NA").map(m => m.id.toInt)
-      println(s"${msas.size} msas: " + msas)
       msas
     }
   }
+
+  private def reportByName(name: String): DisclosureReport = Map(
+    "1" -> D1,
+    "11-1" -> D11_1,
+    "11-10" -> D11_10,
+    "11-2" -> D11_2,
+    "11-3" -> D11_3,
+    "11-4" -> D11_4,
+    "11-5" -> D11_5,
+    "11-6" -> D11_6,
+    "11-7" -> D11_7,
+    "11-8" -> D11_8,
+    "11-9" -> D11_9,
+    "12-2" -> D12_2,
+    "2" -> D2,
+    "3-1" -> D31,
+    "3-2" -> D32,
+    "4-1" -> D41,
+    "4-2" -> D42,
+    "4-3" -> D43,
+    "4-4" -> D44,
+    "4-5" -> D45,
+    "4-6" -> D46,
+    "4-7" -> D47,
+    "5-1" -> D51,
+    "5-2" -> D52,
+    "5-3" -> D53,
+    "5-4" -> D54,
+    "5-6" -> D56,
+    "5-7" -> D57,
+    "7-1" -> D71,
+    "7-2" -> D72,
+    "7-3" -> D73,
+    "7-4" -> D74,
+    "7-5" -> D75,
+    "7-6" -> D76,
+    "7-7" -> D77,
+    "8-1" -> D81,
+    "8-2" -> D82,
+    "8-3" -> D83,
+    "8-4" -> D84,
+    "8-5" -> D85,
+    "8-6" -> D86,
+    "8-7" -> D87,
+    "A1" -> A1,
+    "A2" -> A2,
+    "A3" -> A3,
+    "A4W" -> A4W,
+    "B" -> DiscB,
+    "A1W" -> A1W,
+    "A2W" -> A2W,
+    "A3W" -> A3W,
+    "BW" -> DiscBW,
+    "IRS" -> DIRS
+  )(name)
 
 }

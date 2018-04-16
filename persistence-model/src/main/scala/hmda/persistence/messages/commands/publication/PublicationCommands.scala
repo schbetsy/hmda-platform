@@ -8,5 +8,6 @@ object PublicationCommands {
   case class GenerateDisclosureNationwide(institutionId: String)
   case class GenerateDisclosureForMSA(institutionId: String, msa: Int)
   case class GetReportDetails(institutionId: String)
+  case class PublishIndividualReport(institutionId: String, msa: Int, report: String)
   case class GenerateAggregateReports() extends Command
 }
