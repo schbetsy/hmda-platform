@@ -88,6 +88,160 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
 
   val nationwideReports = List(A1W, A2W, A3W, DiscBW, DIRS)
 
+  val institutionsToReport = List(
+    "572495",
+    "352772",
+    "3874510",
+    "3187630",
+    "3228001",
+    "14-1841762",
+    "4320694",
+    "4438423",
+    "2213046",
+    "636771",
+    "412751",
+    "4438441",
+    "3955419",
+    "3871359",
+    "3877968",
+    "541307",
+    "3915431",
+    "3868694",
+    "3873447",
+    "4184083",
+    "3885806",
+    "761806",
+    "4877639",
+    "4321963",
+    "4346818",
+    "3949203",
+    "26-1193089",
+    "1002878",
+    "4183479",
+    "3876390",
+    "3877641",
+    "1017939",
+    "261146",
+    "4323949",
+    "4183732",
+    "3837038",
+    "3955361",
+    "613307",
+    "45-5510883",
+    "99189",
+    "3850082",
+    "664756",
+    "663245",
+    "631570",
+    "202907",
+    "659855",
+    "3837270",
+    "3842368",
+    "1223440",
+    "4429908",
+    "3885187",
+    "2634191",
+    "3904930",
+    "724904",
+    "656377",
+    "3851557",
+    "4533609",
+    "288853",
+    "4184766",
+    "131490",
+    "3885794",
+    "3845734",
+    "5023910",
+    "858975",
+    "3282852",
+    "4878038",
+    "2917317",
+    "2925666",
+    "4324982",
+    "3592047",
+    "734499",
+    "601050",
+    "4186863",
+    "4325635",
+    "3870419",
+    "45-5523107",
+    "3072606",
+    "666581",
+    "3848810",
+    "3947843",
+    "2855914",
+    "652874",
+    "694904",
+    "4533618",
+    "4323716",
+    "463735",
+    "3871966",
+    "27-1438405",
+    "4889892",
+    "4437798",
+    "3877566",
+    "4533588",
+    "601489",
+    "3153130",
+    "3881509",
+    "3882805",
+    "384278",
+    "322793",
+    "1007846",
+    "4728919",
+    "3876710",
+    "3944226",
+    "208244",
+    "527954",
+    "225698",
+    "277697",
+    "3877089",
+    "245276",
+    "945978",
+    "3872039",
+    "3837252",
+    "3952191",
+    "3880995",
+    "509950",
+    "3871920",
+    "3844410",
+    "937898",
+    "2489805",
+    "961624",
+    "339072",
+    "5027262",
+    "4437789",
+    "3845846",
+    "3868827",
+    "342634",
+    "5134115",
+    "3862021",
+    "764030",
+    "3875647",
+    "723112",
+    "3876354",
+    "611198",
+    "25085",
+    "3955192",
+    "46-3435079",
+    "416245",
+    "211271",
+    "540926",
+    "929352",
+    "972590",
+    "3913697",
+    "3896071",
+    "3913624",
+    "2747587",
+    "413208",
+    "491224",
+    "4437592",
+    "3914135",
+    "3954328",
+    "5083268",
+    "3897452"
+  )
+
   override def receive: Receive = {
 
     case SubscribeAck(Subscribe(PubSubTopics.submissionSigned, None, `self`)) =>
@@ -105,7 +259,10 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
       */
 
     case GenerateDisclosureNationwide(institutionId) =>
-      generateNationwideReports(institutionId)
+      //generateNationwideReports(institutionId)
+      institutionsToReport.foreach { inst =>
+        Await.result(allReportsForInstitution(inst).map(s => Thread.sleep(4000)), 24.hours)
+      }
 
     case GenerateDisclosureForMSA(institutionId, msa) =>
       generateMSAReports(institutionId, msa)
@@ -141,6 +298,36 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
 
       Source(combinations).via(reportFlow).via(publishFlow).runWith(Sink.ignore)
     }
+  }
+
+  private def allReportsForInstitution(institutionId: String): Future[Unit] = {
+    val larSeqF: Future[Seq[LoanApplicationRegister]] = s3Source(institutionId).runWith(Sink.seq)
+    for {
+      institution <- getInstitution(institutionId)
+      subId <- getLatestAcceptedSubmissionId(institutionId)
+      msas <- getMSAFromIRS(subId)
+      larSeq <- larSeqF
+    } yield {
+      println(s"msaList: $msas, submission: $subId")
+      val larSource: Source[LoanApplicationRegister, NotUsed] = Source.fromIterator(() => larSeq.toIterator)
+      println(s"starting nationwide reports for $institutionId")
+      Await.result(generateAndPublish(List(-1), nationwideReports, larSource, institution, msas.toList), 10.minutes)
+
+      msas.foreach { msa: Int =>
+        println(s"starting reports for $institutionId, msa $msa")
+        Await.result(generateAndPublish(List(msa), reports, larSource, institution, msas.toList).map(s => Thread.sleep(1500)), 10.minutes)
+      }
+
+    }
+  }
+
+  private def generateAndPublish(msaList: List[Int], reports: List[DisclosureReport], larSource: Source[LoanApplicationRegister, NotUsed], institution: Institution, allMSAs: List[Int]): Future[Done] = {
+    val combinations = combine(msaList, reports)
+
+    val reportFlow = simpleReportFlow(larSource, institution, allMSAs)
+    val publishFlow = s3Flow(institution)
+
+    Source(combinations).via(reportFlow).via(publishFlow).runWith(Sink.ignore)
   }
 
   private def generateMSAReports(institutionId: String, msa: Int): Future[Unit] = {
