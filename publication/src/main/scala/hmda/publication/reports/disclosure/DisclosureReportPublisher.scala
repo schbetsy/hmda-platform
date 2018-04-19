@@ -268,7 +268,7 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
       generateMSAReports(institutionId, msa)
 
     case PublishIndividualReport(institutionId, msa, report) =>
-      publishIndividualReport(institutionId, msa, reportByName(report))
+      publishIndividualReport(institutionId, msa, reportsByName(report))
 
     case GetReportDetails(institutionId) =>
       val sndr: ActorRef = sender()
@@ -405,7 +405,6 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
     Flow[ByteString]
       .map(s => ModifiedLarCsvParser(s.utf8String) match {
         case Right(lar) =>
-          //println(s"LAR: \t\t${lar.toCSV}")
           lar
       })
 
@@ -427,7 +426,6 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
       msas <- getMSAFromIRS(subId)
     } yield {
       val rd = ReportDetails(institution.respondent.name, subId, msas.size, msas)
-      println(rd)
       rd
     }
   }
@@ -441,7 +439,6 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
       i <- (instPersistence ? GetInstitutionById(institutionId)).mapTo[Option[Institution]]
     } yield {
       val inst = i.getOrElse(Institution.empty)
-      //println(s"Institution name: " + inst.respondent.name)
       inst
     }
   }
@@ -468,7 +465,7 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
     }
   }
 
-  private def reportByName(name: String): DisclosureReport = Map(
+  private def reportsByName: Map[String, DisclosureReport] = Map(
     "1" -> D1,
     "11-1" -> D11_1,
     "11-10" -> D11_10,
@@ -521,6 +518,6 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
     "A3W" -> A3W,
     "BW" -> DiscBW,
     "IRS" -> DIRS
-  )(name)
+  )
 
 }
