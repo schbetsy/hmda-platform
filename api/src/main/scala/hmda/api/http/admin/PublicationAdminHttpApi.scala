@@ -12,12 +12,9 @@ import akka.util.Timeout
 import hmda.api.http.HmdaCustomDirectives
 import hmda.api.protocol.processing.ApiErrorProtocol
 import hmda.api.protocol.publication.ReportDetailsProtocol
-import hmda.model.publication.ReportDetails
 import hmda.persistence.messages.commands.publication.PublicationCommands._
-import hmda.persistence.messages.events.pubsub.PubSubEvents.{ FindAggregatePublisher, FindDisclosurePublisher }
-import hmda.publication.HmdaPublicationSupervisor
+import hmda.persistence.messages.events.pubsub.PubSubEvents.FindDisclosurePublisher
 
-import scala.concurrent.Future
 import scala.util.{ Failure, Success }
 
 trait PublicationAdminHttpApi extends HmdaCustomDirectives with ApiErrorProtocol with ReportDetailsProtocol {
@@ -28,64 +25,25 @@ trait PublicationAdminHttpApi extends HmdaCustomDirectives with ApiErrorProtocol
 
   val log: LoggingAdapter
 
-  def disclosureNationwidePath(publicationSupervisor: ActorRef) =
-    path("disclosure" / "institution" / Segment / "nationwide") { (instId) =>
+  def disclosureInstitutionsPath(publicationSupervisor: ActorRef) =
+    path("disclosure" / "list") {
       extractExecutionContext { executor =>
         implicit val ec = executor
+
         timedPost { uri =>
+          entity(as[List[String]]) { ids =>
+            val message = for {
+              p <- (publicationSupervisor ? FindDisclosurePublisher()).mapTo[ActorRef]
+            } yield {
+              p ! GenerateDisclosureReports2(ids)
+            }
 
-          val message = for {
-            p <- (publicationSupervisor ? FindDisclosurePublisher()).mapTo[ActorRef]
-          } yield {
-            p ! GenerateDisclosureNationwide(instId)
+            onComplete(message) {
+              case Success(sub) => complete(ToResponseMarshallable(StatusCodes.OK))
+              case Failure(error) => completeWithInternalError(uri, error)
+            }
           }
 
-          onComplete(message) {
-            case Success(sub) => complete(ToResponseMarshallable(StatusCodes.OK))
-            case Failure(error) =>
-              completeWithInternalError(uri, error)
-          }
-        }
-      }
-    }
-
-  def disclosureMSAPath(publicationSupervisor: ActorRef) =
-    path("disclosure" / "institution" / Segment / IntNumber) { (instId, msa) =>
-      extractExecutionContext { executor =>
-        implicit val ec = executor
-        timedPost { uri =>
-
-          val message = for {
-            p <- (publicationSupervisor ? FindDisclosurePublisher()).mapTo[ActorRef]
-          } yield {
-            p ! GenerateDisclosureForMSA(instId, msa)
-          }
-
-          onComplete(message) {
-            case Success(sub) => complete(ToResponseMarshallable(StatusCodes.OK))
-            case Failure(error) =>
-              completeWithInternalError(uri, error)
-          }
-        }
-      }
-    }
-
-  def disclosurePrepPath(publicationSupervisor: ActorRef) =
-    path("disclosure" / "info" / Segment) { (instId) =>
-      extractExecutionContext { executor =>
-        implicit val ec = executor
-        timedGet { uri =>
-
-          val details: Future[ReportDetails] = for {
-            p <- (publicationSupervisor ? FindDisclosurePublisher()).mapTo[ActorRef]
-            d <- (p ? GetReportDetails(instId)).mapTo[ReportDetails]
-          } yield d
-
-          onComplete(details) {
-            case Success(sub) => complete(ToResponseMarshallable(details))
-            case Failure(error) =>
-              completeWithInternalError(uri, error)
-          }
         }
       }
     }
@@ -114,9 +72,7 @@ trait PublicationAdminHttpApi extends HmdaCustomDirectives with ApiErrorProtocol
     }
 
   def publicationRoutes(supervisor: ActorRef, publicationSupervisor: ActorRef) =
-    disclosurePrepPath(publicationSupervisor) ~
-      disclosureNationwidePath(publicationSupervisor) ~
-      disclosureMSAPath(publicationSupervisor) ~
+    disclosureInstitutionsPath(publicationSupervisor) ~
       individualReportPath(publicationSupervisor)
 
   /*
