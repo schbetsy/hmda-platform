@@ -172,7 +172,6 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
   ): Flow[(Int, DisclosureReport), DisclosureReportPayload, NotUsed] =
     Flow[(Int, DisclosureReport)].mapAsync(1) {
       case (msa, report) =>
-        //println(s"Generating report ${report.reportId} for msa $msa")
         report.generate(larSource, msa, institution, msaList)
     }
 
@@ -191,8 +190,7 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
   val byteStringToLarFlow: Flow[ByteString, LoanApplicationRegister, NotUsed] =
     Flow[ByteString]
       .map(s => ModifiedLarCsvParser(s.utf8String) match {
-        case Right(lar) =>
-          lar
+        case Right(lar) => lar
       })
 
   /**
@@ -213,10 +211,7 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
     for {
       instPersistence <- fInstitutionsActor
       i <- (instPersistence ? GetInstitutionById(institutionId)).mapTo[Option[Institution]]
-    } yield {
-      val inst = i.getOrElse(Institution.empty)
-      inst
-    }
+    } yield i.getOrElse(Institution.empty)
   }
 
   private def getLatestAcceptedSubmissionId(institutionId: String): Future[SubmissionId] = {
@@ -224,10 +219,7 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
     for {
       subPersistence <- submissionPersistence
       latestAccepted <- (subPersistence ? GetLatestAcceptedSubmission).mapTo[Option[Submission]]
-    } yield {
-      val subId = latestAccepted.get.id
-      subId
-    }
+    } yield latestAccepted.get.id
   }
 
   private def getMSAFromIRS(submissionId: SubmissionId): Future[Seq[Int]] = {
@@ -235,10 +227,7 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
       manager <- (supervisor ? FindProcessingActor(SubmissionManager.name, submissionId)).mapTo[ActorRef]
       larStats <- (manager ? GetActorRef(SubmissionLarStats.name)).mapTo[ActorRef]
       stats <- (larStats ? FindIrsStats(submissionId)).mapTo[Seq[Msa]]
-    } yield {
-      val msas = stats.filter(m => m.id != "NA").map(m => m.id.toInt)
-      msas
-    }
+    } yield stats.filter(m => m.id != "NA").map(m => m.id.toInt)
   }
 
   private def reportsByName: Map[String, DisclosureReport] = Map(
