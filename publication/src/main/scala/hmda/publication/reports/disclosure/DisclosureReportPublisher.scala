@@ -72,7 +72,6 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
   val awsSettings = new S3Settings(MemoryBufferType, None, awsCredentials, region, false)
   val s3Client = new S3Client(awsSettings)
 
-  /*
   val reports = List(
     D1, D2,
     D31, D32,
@@ -86,9 +85,6 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
     A4W,
     DiscB
   )
-  */
-
-  val reports = List(D31, D12_1)
 
   val nationwideReports = List(A1W, A2W, A3W, DiscBW, DIRS)
 
@@ -102,7 +98,7 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
 
     case GenerateDisclosureReports2(institutionIds) =>
       institutionIds.foreach { inst =>
-        Await.result(allReportsForInstitution(inst), 2.hours) //.map(s => Thread.sleep(4000)), 24.hours)
+        Await.result(allReportsForInstitution(inst).map(s => Thread.sleep(2000)), 24.hours)
       }
 
     case PublishIndividualReport(institutionId, msa, report) =>
@@ -140,8 +136,8 @@ class DisclosureReportPublisher extends HmdaActor with LoanApplicationRegisterCa
     } yield {
       println(s"msaList: $msas, submission: $subId")
       val larSource: Source[LoanApplicationRegister, NotUsed] = Source.fromIterator(() => larSeq.toIterator)
-      //println(s"starting nationwide reports for $institutionId")
-      //Await.result(generateAndPublish(List(-1), nationwideReports, larSource, institution, msas.toList), 10.minutes)
+      println(s"starting nationwide reports for $institutionId")
+      Await.result(generateAndPublish(List(-1), nationwideReports, larSource, institution, msas.toList), 10.minutes)
 
       msas.foreach { msa: Int =>
         println(s"starting reports for $institutionId, msa $msa")
